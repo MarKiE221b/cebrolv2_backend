@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { MEETING_CODES, DOC_STATUS } from "../utils/constants.js";
+import { MEETING_CODES, DOC_STATUS, BOARD_ACTION, OFFICE_STATUS } from "../utils/constants.js";
 
 /**
  * CEB Repository Document — Resolutions and Referendum files.
@@ -14,13 +14,13 @@ const cebDocumentSchema = new mongoose.Schema(
       required: true,
     },
     /**
-     * CEB Code — e.g. "CEB-2026-005"
-     * Manually assigned identifier for the entire CEB session record.
+     * CEB Code — derived from the linked meeting's meetingRef (e.g. "CEB-2026-005").
+     * Auto-populated by the controller from meeting.meetingRef.
      */
     cebCode: {
-      type:     String,
-      required: true,
-      trim:     true,
+      type:    String,
+      trim:    true,
+      default: "",
     },
     /** Meeting type code: CEB | EXE | MAN | NDM | REF */
     meetingCode: {
@@ -46,6 +46,13 @@ const cebDocumentSchema = new mongoose.Schema(
       ref:     "Office",
       default: null,
     },
+    /** All offices to which this resolution is directed / assigned */
+    assignedOffices: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref:  "Office",
+      },
+    ],
     /** Short summary / briefer displayed in the listing */
     briefer: {
       type:    String,
@@ -111,6 +118,40 @@ const cebDocumentSchema = new mongoose.Schema(
       type:    Boolean,
       default: true,
     },
+    /** Board action taken on the document */
+    boardAction: {
+      type:    String,
+      enum:    Object.values(BOARD_ACTION),
+      default: null,
+    },
+    /**
+     * Per-office compliance statuses.
+     * One entry per office in assignedOffices.
+     * Only the personnel of each office can update their own entry.
+     */
+    officeStatuses: [
+      {
+        office: {
+          type:     mongoose.Schema.Types.ObjectId,
+          ref:      "Office",
+          required: true,
+        },
+        status: {
+          type:    String,
+          enum:    Object.values(OFFICE_STATUS),
+          default: OFFICE_STATUS.PENDING,
+        },
+        updatedBy: {
+          type:    mongoose.Schema.Types.ObjectId,
+          ref:     "User",
+          default: null,
+        },
+        updatedAt: {
+          type:    Date,
+          default: null,
+        },
+      },
+    ],
     tags: [{ type: String, trim: true }],
 
     uploadedBy: {

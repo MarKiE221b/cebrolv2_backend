@@ -2,6 +2,7 @@ import Meeting from "../models/meeting.js";
 import Agenda  from "../models/agenda.js";
 import { MEETING_CODES, MEETING_STATUS } from "../utils/constants.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { ROLES } from "../../authentication/utils/roles.js";
 
 // ── List meetings ──────────────────────────────────────────────────────────
 export const listMeetings = async (req, res, next) => {
@@ -22,6 +23,21 @@ export const listMeetings = async (req, res, next) => {
 
     const pageNum  = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.min(100, parseInt(limit, 10) || 20);
+
+    // Office-based restriction: assigned_user and viewer only see meetings
+    // their office is invited to (or meetings open to all).
+    const userRole   = res.locals.session?.user?.role;
+    const userOffice = res.locals.session?.user?.office;
+
+    if (userRole === ROLES.ASSIGNED_USER || userRole === ROLES.VIEWER) {
+      if (!userOffice) {
+        return res.json({ ok: true, data: [], meta: { total: 0, page: pageNum, limit: limitNum, pages: 1 } });
+      }
+      filter.$or = [
+        { invitedOffices: { $size: 0 } },
+        { invitedOffices: userOffice },
+      ];
+    }
 
     const [meetings, total] = await Promise.all([
       Meeting.find(filter)

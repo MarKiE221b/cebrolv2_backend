@@ -44,3 +44,19 @@ export const MEETING_STATUS = Object.freeze({
   COMPLETED:   "COMPLETED",
   CANCELLED:   "CANCELLED",
 });
+
+/** Board action taken on a CEB document */
+export const BOARD_ACTION = Object.freeze({
+  APPROVED:               "APPROVED",
+  CONDITIONALLY_APPROVED: "CONDITIONALLY_APPROVED",
+  DISAPPROVED:            "DISAPPROVED",
+});
+
+/** Per-office compliance status for assigned offices on a CEB document */
+export const OFFICE_STATUS = Object.freeze({
+  PENDING:        "PENDING",
+  RECEIVED:       "RECEIVED",
+  IN_PROGRESS:    "IN_PROGRESS",
+  COMPLIED:       "COMPLIED",
+  NOT_APPLICABLE: "NOT_APPLICABLE",
+});

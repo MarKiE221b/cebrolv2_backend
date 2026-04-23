@@ -7,6 +7,8 @@ import {
   downloadDocument,
   updateDocument,
   deleteDocument,
+  patchBoardAction,
+  patchOfficeStatus,
 } from "../controllers/cebDocument.js";
 import { requireRole, ROLES } from "../../authentication/middlewares/authSession.js";
 
@@ -19,6 +21,12 @@ const router = Router();
 router.get ("/"   ,         listDocuments);
 router.get ("/:id",         getDocument);
 router.get ("/:id/download", downloadDocument);
+
+// Board action: secretary / admin only
+router.patch("/:id/board-action",  requireRole(ROLES.COMMUNICATIONS_SECRETARY, ROLES.SUPER_ADMIN), patchBoardAction);
+
+// Per-office status: any authenticated user (access checked inside controller)
+router.patch("/:id/office-status", patchOfficeStatus);
 
 // Secretary / admin only for mutations
 router.post  ("/",     requireRole(ROLES.COMMUNICATIONS_SECRETARY, ROLES.SUPER_ADMIN), upload.single("file"), uploadDocument);

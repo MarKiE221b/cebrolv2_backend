@@ -34,7 +34,7 @@ export const getDashboardStats = async (req, res, next) => {
       Meeting.countDocuments({ status: MEETING_STATUS.SCHEDULED }),
       Meeting.findOne({ status: MEETING_STATUS.SCHEDULED, scheduledDate: { $gte: now } })
         .sort({ scheduledDate: 1 })
-        .select("title scheduledDate meetingCode meetingRef")
+        .select("title scheduledDate meetingCode meetingRef venue")
         .lean(),
       AccessRequest.countDocuments({ status: ACCESS_STATUS.PENDING }),
       ActivityLog.find({})

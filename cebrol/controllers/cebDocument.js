@@ -3,8 +3,9 @@ import getS3Client        from "../../website/utils/storageConfig.js";
 import { uploadMulterFileToSpaces } from "../../website/utils/spacesStorage.js";
 import { encryptBuffer, decryptBuffer } from "../utils/encryption.js";
 import CebDocument from "../models/cebDocument.js";
+import Meeting from "../models/meeting.js";
 import AccessRequest from "../models/accessRequest.js";
-import { ACCESS_STATUS, DOC_STATUS, MEETING_CODES } from "../utils/constants.js";
+import { ACCESS_STATUS, BOARD_ACTION, OFFICE_STATUS, DOC_STATUS, MEETING_CODES } from "../utils/constants.js";
 import { ROLES } from "../../authentication/middlewares/authSession.js";
 import { logActivity } from "../utils/activityLogger.js";
 
@@ -13,12 +14,13 @@ export const listDocuments = async (req, res, next) => {
   try {
     const {
       meetingCode, office, status, from, to,
-      search, page = 1, limit = 20,
+      search, assignedOffice, page = 1, limit = 20,
     } = req.query;
 
     const filter = {};
     if (meetingCode && MEETING_CODES[meetingCode]) filter.meetingCode = meetingCode;
     if (office)  filter.office  = office;
+    if (assignedOffice) filter.assignedOffices = assignedOffice;
     if (status && Object.values(DOC_STATUS).includes(status))  filter.status = status;
     if (from || to) {
       filter.cebDate = {};
@@ -38,9 +40,12 @@ export const listDocuments = async (req, res, next) => {
 
     const [docs, total] = await Promise.all([
       CebDocument.find(filter)
-        .populate("office",       "name code")
-        .populate("meeting",      "title meetingCode scheduledDate meetingRef")
-        .populate("uploadedBy",   "name email")
+        .populate("office",                    "name code")
+        .populate("assignedOffices",           "name code")
+        .populate("officeStatuses.office",     "name code")
+        .populate("officeStatuses.updatedBy",  "name email")
+        .populate("meeting",                   "title meetingCode scheduledDate meetingRef")
+        .populate("uploadedBy",                "name email")
         .sort({ cebDate: -1 })
         .skip((pageNum - 1) * limitNum)
         .limit(limitNum)
@@ -62,10 +67,13 @@ export const listDocuments = async (req, res, next) => {
 export const getDocument = async (req, res, next) => {
   try {
     const doc = await CebDocument.findById(req.params.id)
-      .populate("office",         "name code")
-      .populate("meeting",        "title meetingCode scheduledDate meetingRef")
-      .populate("uploadedBy",     "name email")
-      .populate("lastModifiedBy", "name email")
+      .populate("office",                    "name code")
+      .populate("assignedOffices",           "name code")
+      .populate("officeStatuses.office",     "name code")
+      .populate("officeStatuses.updatedBy",  "name email")
+      .populate("meeting",                   "title meetingCode scheduledDate meetingRef")
+      .populate("uploadedBy",                "name email")
+      .populate("lastModifiedBy",            "name email")
       .lean();
 
     if (!doc) return res.status(404).json({ error: "Document not found" });
@@ -84,17 +92,34 @@ export const uploadDocument = async (req, res, next) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
     const {
-      cebDate, cebCode, meetingCode, resolutionNumber,
       meeting, office, briefer, title, subject,
-      remarks, tags, status,
+      remarks, tags, status, boardAction, isRestricted, signatories,
     } = req.body ?? {};
 
-    if (!cebDate || !cebCode || !meetingCode || !title || !office) {
-      return res.status(400).json({ error: "cebDate, cebCode, meetingCode, title and office are required" });
+    if (!meeting) {
+      return res.status(400).json({ error: "meeting (Linked Meeting) is required" });
     }
-    if (!MEETING_CODES[meetingCode]) {
-      return res.status(400).json({ error: "Invalid meetingCode" });
+    if (!title || !office) {
+      return res.status(400).json({ error: "title and office are required" });
     }
+
+    // Parse assignedOffices (sent as JSON string in FormData)
+    let assignedOfficesParsed = [];
+    try {
+      if (req.body.assignedOffices) {
+        assignedOfficesParsed = JSON.parse(req.body.assignedOffices);
+        if (!Array.isArray(assignedOfficesParsed)) assignedOfficesParsed = [];
+      }
+    } catch { /* ignore malformed JSON */ }
+
+    // Derive cebDate, cebCode and meetingCode from the linked meeting
+    const linkedMeeting = await Meeting.findById(meeting).lean();
+    if (!linkedMeeting) {
+      return res.status(400).json({ error: "Linked meeting not found" });
+    }
+    const cebDate     = linkedMeeting.scheduledDate;
+    const cebCode     = linkedMeeting.meetingRef  ?? "";
+    const meetingCode = linkedMeeting.meetingCode ?? "CEB";
 
     // 1. Encrypt the file buffer
     const { cipher, iv } = encryptBuffer(req.file.buffer);
@@ -112,28 +137,37 @@ export const uploadDocument = async (req, res, next) => {
 
     // 3. Persist metadata + iv
     const doc = await CebDocument.create({
-      cebDate:         new Date(cebDate),
-      cebCode:         cebCode.trim(),
+      cebDate:     new Date(cebDate),
+      cebCode,
       meetingCode,
-      resolutionNumber: resolutionNumber ?? "",
-      meeting:         meeting   || null,
+      meeting,
       office,
+      assignedOffices: assignedOfficesParsed,
+      officeStatuses:  assignedOfficesParsed.map((officeId) => ({
+        office:    officeId,
+        status:    OFFICE_STATUS.PENDING,
+        updatedBy: null,
+        updatedAt: null,
+      })),
       briefer:         briefer   ?? "",
       title:           title.trim(),
       subject:         subject   ?? "",
       remarks:         remarks   ?? "",
       tags:            tags ? JSON.parse(tags) : [],
+      signatories:     signatories ? JSON.parse(signatories) : [],
       status:          status ?? DOC_STATUS.DRAFT,
+      boardAction:     boardAction && Object.values(BOARD_ACTION).includes(boardAction) ? boardAction : null,
       fileKey:         uploaded.key,
       originalName:    req.file.originalname,
       mimeType:        req.file.mimetype,
       fileSize:        req.file.size,
       encryptionIv:    iv,
-      isRestricted:    true,
+      isRestricted:    isRestricted === "false" ? false : true,
       uploadedBy:      res.locals.session?.user?.id ?? null,
     });
 
-    await doc.populate("office",  "name code");
+    await doc.populate("office",          "name code");
+    await doc.populate("assignedOffices", "name code");
     await doc.populate("meeting", "title meetingCode scheduledDate");
 
     logActivity(res.locals.session, req, "doc_upload", `${doc.cebCode} — ${doc.title}`, { docId: doc._id });
@@ -156,26 +190,29 @@ export const downloadDocument = async (req, res, next) => {
     const privileged = [ROLES.SUPER_ADMIN, ROLES.COMMUNICATIONS_SECRETARY].includes(userRole);
 
     if (!privileged) {
-      // Must have an approved, non-expired AccessRequest
-      const now = new Date();
-      const approved = await AccessRequest.findOne({
-        document:    doc._id,
-        requestedBy: userId,
-        status:      ACCESS_STATUS.APPROVED,
-        $or: [
-          { expiresAt: null },
-          { expiresAt: { $gte: now } },
-        ],
-      });
+      // Restricted documents require an approved, non-expired AccessRequest
+      if (doc.isRestricted) {
+        const now = new Date();
+        const approved = await AccessRequest.findOne({
+          document:    doc._id,
+          requestedBy: userId,
+          status:      ACCESS_STATUS.APPROVED,
+          $or: [
+            { expiresAt: null },
+            { expiresAt: { $gte: now } },
+          ],
+        });
 
-      if (!approved) {
-        return res.status(403).json({ error: "Access denied. No approved access request for this document." });
+        if (!approved) {
+          return res.status(403).json({ error: "Access denied. No approved access request for this document." });
+        }
+
+        // Increment download counter
+        approved.downloadCount    = (approved.downloadCount ?? 0) + 1;
+        approved.lastDownloadedAt = now;
+        await approved.save();
       }
-
-      // Increment download counter
-      approved.downloadCount       = (approved.downloadCount ?? 0) + 1;
-      approved.lastDownloadedAt    = now;
-      await approved.save();
+      // Non-restricted documents are open to all authenticated users — no access request needed
     }
 
     // Fetch encrypted blob from Spaces
@@ -207,20 +244,130 @@ export const updateDocument = async (req, res, next) => {
     if (!doc) return res.status(404).json({ error: "Document not found" });
 
     const fields = [
-      "cebDate", "cebCode", "meetingCode", "resolutionNumber",
       "meeting", "office", "briefer", "title", "subject",
-      "remarks", "tags", "status", "signatories", "isRestricted",
+      "remarks", "tags", "status", "signatories", "isRestricted", "boardAction",
     ];
     for (const f of fields) {
       if (req.body?.[f] !== undefined) {
         doc[f] = f === "cebDate" ? new Date(req.body[f]) : req.body[f];
       }
     }
+
+    // Handle assignedOffices separately (array field) and sync officeStatuses
+    if (req.body?.assignedOffices !== undefined) {
+      const newOffices = Array.isArray(req.body.assignedOffices) ? req.body.assignedOffices : [];
+      doc.assignedOffices = newOffices;
+
+      // Build a map of existing statuses so we don't overwrite progress already recorded
+      const existingMap = {};
+      for (const os of doc.officeStatuses ?? []) {
+        existingMap[String(os.office)] = os;
+      }
+      // Rebuild officeStatuses — keep existing entries for offices still assigned, add PENDING for new ones
+      doc.officeStatuses = newOffices.map((officeId) => {
+        const key = String(officeId);
+        return existingMap[key] ?? { office: officeId, status: OFFICE_STATUS.PENDING, updatedBy: null, updatedAt: null };
+      });
+    }
+
+    // If meeting changed, re-derive cebDate, cebCode and meetingCode
+    if (req.body?.meeting !== undefined && req.body.meeting) {
+      const linkedMeeting = await Meeting.findById(req.body.meeting).lean();
+      if (linkedMeeting) {
+        doc.cebDate     = linkedMeeting.scheduledDate ?? doc.cebDate;
+        doc.cebCode     = linkedMeeting.meetingRef    ?? doc.cebCode;
+        doc.meetingCode = linkedMeeting.meetingCode   ?? doc.meetingCode;
+      }
+    }
+
     doc.lastModifiedBy = res.locals.session?.user?.id ?? null;
     await doc.save();
 
     logActivity(res.locals.session, req, "doc_update", `${doc.cebCode} — ${doc.title}`, { docId: doc._id });
     return res.json({ ok: true, data: doc });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── Patch board action (secretary / admin only) ──────────────────────────────
+export const patchBoardAction = async (req, res, next) => {
+  try {
+    const doc = await CebDocument.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: "Document not found" });
+
+    // Only privileged roles may set the board action
+    const userRole   = res.locals.session?.user?.role;
+    const privileged = [ROLES.SUPER_ADMIN, ROLES.COMMUNICATIONS_SECRETARY].includes(userRole);
+    if (!privileged) {
+      return res.status(403).json({ error: "Only the secretariat or admin may update the board action." });
+    }
+
+    const { boardAction } = req.body;
+    const valid = ["APPROVED", "CONDITIONALLY_APPROVED", "DISAPPROVED", "", null];
+    if (!valid.includes(boardAction)) {
+      return res.status(400).json({ error: "Invalid boardAction value." });
+    }
+
+    doc.boardAction    = boardAction || null;
+    doc.lastModifiedBy = res.locals.session?.user?.id ?? null;
+    await doc.save();
+
+    logActivity(res.locals.session, req, "doc_board_action", `${doc.cebCode} — ${doc.title}`, { docId: doc._id, boardAction });
+    return res.json({ ok: true, data: { boardAction: doc.boardAction } });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── Patch per-office status (assigned office personnel only) ─────────────────
+export const patchOfficeStatus = async (req, res, next) => {
+  try {
+    const doc = await CebDocument.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: "Document not found" });
+
+    const userRole   = res.locals.session?.user?.role;
+    const userOffice = res.locals.session?.user?.office;
+    const userId     = res.locals.session?.user?.id;
+    const privileged = [ROLES.SUPER_ADMIN, ROLES.COMMUNICATIONS_SECRETARY].includes(userRole);
+
+    const { status } = req.body;
+    if (!status || !Object.values(OFFICE_STATUS).includes(status)) {
+      return res.status(400).json({ error: "Invalid status value." });
+    }
+
+    // Determine which office's status to update
+    // Privileged users may pass an explicit officeId; assigned users only update their own
+    let targetOfficeId;
+    if (privileged) {
+      targetOfficeId = req.body.officeId ?? userOffice;
+      if (!targetOfficeId) {
+        return res.status(400).json({ error: "officeId is required." });
+      }
+    } else {
+      if (!userOffice) {
+        return res.status(403).json({ error: "Your account has no office assigned." });
+      }
+      targetOfficeId = userOffice;
+    }
+
+    // Find the matching officeStatus entry
+    const entry = (doc.officeStatuses ?? []).find(
+      (os) => String(os.office) === String(targetOfficeId)
+    );
+
+    if (!entry) {
+      return res.status(403).json({ error: "Your office is not assigned to this document." });
+    }
+
+    entry.status    = status;
+    entry.updatedBy = userId;
+    entry.updatedAt = new Date();
+    doc.lastModifiedBy = userId;
+    await doc.save();
+
+    logActivity(res.locals.session, req, "doc_office_status", `${doc.cebCode} — ${doc.title}`, { docId: doc._id, officeId: targetOfficeId, status });
+    return res.json({ ok: true, data: { officeId: targetOfficeId, status } });
   } catch (err) {
     next(err);
   }

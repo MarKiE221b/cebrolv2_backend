@@ -3,9 +3,9 @@
  *
  * ROLES
  * ─────
- * super_admin            – Full system access. Manages users, offices, all content.
- * communications_secretary – Manages CEB documents, agenda, scheduler, assigned users.
- * assigned_user          – Office-bound user. Access determined by granted permissions.
+ * super_admin             – Full system access. Manages users, offices, all content.
+ * commission_secretariat   – Manages CEB documents, agenda, scheduler, assigned users.
+ * assigned_user           – Office-bound user. Access determined by granted permissions.
  *
  * PERMISSIONS
  * ───────────
@@ -15,14 +15,16 @@
 
 export const ROLES = Object.freeze({
   SUPER_ADMIN:               "super_admin",
-  COMMUNICATIONS_SECRETARY:  "communications_secretary",
+  COMMUNICATIONS_SECRETARY:  "commission_secretariat",
   ASSIGNED_USER:             "assigned_user",
+  VIEWER:                    "viewer",
 });
 
 export const ROLE_LABELS = Object.freeze({
   super_admin:              "Super Administrator",
-  communications_secretary: "Communications Secretary",
+  commission_secretariat:   "Commission Secretariat",
   assigned_user:            "Assigned User",
+  viewer:                   "Viewer",
 });
 
 /** Ordered list used in dropdowns (most privileged first). */
@@ -30,6 +32,7 @@ export const ROLE_LIST = [
   ROLES.SUPER_ADMIN,
   ROLES.COMMUNICATIONS_SECRETARY,
   ROLES.ASSIGNED_USER,
+  ROLES.VIEWER,
 ];
 
 // ── Granular permission flags ────────────────────────────────────────────────
@@ -83,5 +86,10 @@ export const DEFAULT_ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.REPO_VIEW,
     PERMISSIONS.AGENDA_VIEW,
     PERMISSIONS.SCHEDULER_VIEW,
+  ],
+
+  [ROLES.VIEWER]: [
+    PERMISSIONS.REPO_VIEW,
+    PERMISSIONS.AGENDA_VIEW,
   ],
 });

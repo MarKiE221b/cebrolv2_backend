@@ -63,6 +63,16 @@ const agendaSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref:  "User",
     },
+    /**
+     * Distinguishes between a meeting agenda file and minutes of the meeting.
+     * AGENDA  — the pre-meeting agenda document.
+     * MINUTES — the post-meeting minutes / minutes of the meeting.
+     */
+    type: {
+      type:    String,
+      enum:    ["AGENDA", "MINUTES"],
+      default: "AGENDA",
+    },
   },
   { timestamps: true },
 );
