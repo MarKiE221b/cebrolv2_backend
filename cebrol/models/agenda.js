@@ -64,14 +64,15 @@ const agendaSchema = new mongoose.Schema(
       ref:  "User",
     },
     /**
-     * Distinguishes between a meeting agenda file and minutes of the meeting.
-     * AGENDA  — the pre-meeting agenda document.
-     * MINUTES — the post-meeting minutes / minutes of the meeting.
+     * Distinguishes between agenda types and minutes of the meeting.
+     * PROVISIONAL_AGENDA — the draft / pre-meeting agenda document.
+     * APPROVED_AGENDA    — the finalised agenda; only allowed after meeting is COMPLETED.
+     * MINUTES            — the post-meeting minutes / minutes of the meeting.
      */
     type: {
       type:    String,
-      enum:    ["AGENDA", "MINUTES"],
-      default: "AGENDA",
+      enum:    ["PROVISIONAL_AGENDA", "APPROVED_AGENDA", "MINUTES"],
+      default: "PROVISIONAL_AGENDA",
     },
   },
   { timestamps: true },

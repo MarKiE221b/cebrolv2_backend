@@ -13,7 +13,7 @@ export const listAgendas = async (req, res, next) => {
     const { meetingId, type, page = 1, limit = 50 } = req.query;
     const filter = {};
     if (meetingId) filter.meeting = meetingId;
-    if (type && ["AGENDA", "MINUTES"].includes(type)) filter.type = type;
+    if (type && ["PROVISIONAL_AGENDA", "APPROVED_AGENDA", "MINUTES"].includes(type)) filter.type = type;
 
     // ── Office-based access restriction ──────────────────────────────────
     // assigned_user and viewer may only see agendas for meetings they are
@@ -81,7 +81,8 @@ export const uploadAgenda = async (req, res, next) => {
       return res.status(400).json({ error: "meetingId is required" });
     if (!title) return res.status(400).json({ error: "title is required" });
 
-    const docType = ["AGENDA", "MINUTES"].includes(type) ? type : "AGENDA";
+    const VALID_TYPES = ["PROVISIONAL_AGENDA", "APPROVED_AGENDA", "MINUTES"];
+    const docType = VALID_TYPES.includes(type) ? type : "PROVISIONAL_AGENDA";
 
     const meeting = await Meeting.findById(meetingId);
     if (!meeting)

@@ -18,7 +18,7 @@ export const authConfig = {
       name: isProd ? "__Host-authjs.session-token" : "authjs.session-token",
       options: {
         httpOnly: true,
-        sameSite: isProd ? "none" : "lax",
+        sameSite: isProd ? "lax" : "lax",
         path: "/",
         secure: isProd,
       },
@@ -27,7 +27,7 @@ export const authConfig = {
       name: isProd ? "__Host-authjs.csrf-token" : "authjs.csrf-token",
       options: {
         httpOnly: true,
-        sameSite: isProd ? "none" : "lax",
+        sameSite: isProd ? "lax" : "lax",
         path: "/",
         secure: isProd,
       },
@@ -36,7 +36,7 @@ export const authConfig = {
       name: isProd ? "__Host-authjs.callback-url" : "authjs.callback-url",
       options: {
         httpOnly: true,
-        sameSite: isProd ? "none" : "lax",
+        sameSite: isProd ? "lax" : "lax",
         path: "/",
         secure: isProd,
       },

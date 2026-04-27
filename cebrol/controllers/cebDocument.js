@@ -92,16 +92,22 @@ export const uploadDocument = async (req, res, next) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
     const {
-      meeting, office, briefer, title, subject,
-      remarks, tags, status, boardAction, isRestricted, signatories,
+      meeting, briefer, title, subject,
+      remarks, status, boardAction, isRestricted,
     } = req.body ?? {};
 
     if (!meeting) {
       return res.status(400).json({ error: "meeting (Linked Meeting) is required" });
     }
-    if (!title || !office) {
-      return res.status(400).json({ error: "title and office are required" });
+    if (!title) {
+      return res.status(400).json({ error: "title is required" });
     }
+
+    // Parse tags — sent as tags[] individual fields from FormData
+    const rawTags = req.body["tags[]"];
+    const tagsParsed = rawTags
+      ? (Array.isArray(rawTags) ? rawTags : [rawTags]).map((t) => t.trim()).filter(Boolean)
+      : [];
 
     // Parse assignedOffices (sent as JSON string in FormData)
     let assignedOfficesParsed = [];
@@ -141,7 +147,6 @@ export const uploadDocument = async (req, res, next) => {
       cebCode,
       meetingCode,
       meeting,
-      office,
       assignedOffices: assignedOfficesParsed,
       officeStatuses:  assignedOfficesParsed.map((officeId) => ({
         office:    officeId,
@@ -153,8 +158,7 @@ export const uploadDocument = async (req, res, next) => {
       title:           title.trim(),
       subject:         subject   ?? "",
       remarks:         remarks   ?? "",
-      tags:            tags ? JSON.parse(tags) : [],
-      signatories:     signatories ? JSON.parse(signatories) : [],
+      tags:            tagsParsed,
       status:          status ?? DOC_STATUS.DRAFT,
       boardAction:     boardAction && Object.values(BOARD_ACTION).includes(boardAction) ? boardAction : null,
       fileKey:         uploaded.key,
@@ -244,8 +248,8 @@ export const updateDocument = async (req, res, next) => {
     if (!doc) return res.status(404).json({ error: "Document not found" });
 
     const fields = [
-      "meeting", "office", "briefer", "title", "subject",
-      "remarks", "tags", "status", "signatories", "isRestricted", "boardAction",
+      "meeting", "briefer", "title", "subject",
+      "remarks", "tags", "status", "isRestricted", "boardAction",
     ];
     for (const f of fields) {
       if (req.body?.[f] !== undefined) {
