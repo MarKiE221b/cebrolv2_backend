@@ -4,6 +4,13 @@ import { ROLES, DEFAULT_ROLE_PERMISSIONS } from "../utils/roles.js";
 const userSchema = new mongoose.Schema(
   {
     // ── Identity ──────────────────────────────────────────────────────────
+    /** Clerk user ID — links this record to the Clerk auth provider. */
+    clerkId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      default: null,
+    },
     name: {
       type: String,
       required: true,
@@ -15,10 +22,6 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
-    },
-    passwordHash: {
-      type: String,
-      required: true,
     },
 
     // ── Role & Permissions ────────────────────────────────────────────────
@@ -105,9 +108,7 @@ userSchema.pre("save", async function () {
 
 // ── Safe public projection ─────────────────────────────────────────────────
 userSchema.methods.toPublic = function () {
-  const obj = this.toObject();
-  delete obj.passwordHash;
-  return obj;
+  return this.toObject();
 };
 
 const User = mongoose.models.User || mongoose.model("User", userSchema);

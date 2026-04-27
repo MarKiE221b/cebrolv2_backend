@@ -22,11 +22,22 @@ router.use(authSession);
 /** Bootstrap: create the very first super-admin (unprotected, use once). */
 router.post("/register", register);
 
-/** Returns current session info. Works for all apps — returns {ok:false} when not logged in instead of 401. */
+/** Returns current user info from MongoDB. Returns {ok:false} when not signed in. */
 router.get("/me", (req, res) => {
-  const session = res.locals.session;
-  if (!session?.user) return res.json({ ok: false });
-  return res.json({ ok: true, user: session.user });
+  const user = req.dbUser;
+  if (!user) return res.json({ ok: false });
+  return res.json({
+    ok: true,
+    user: {
+      id:          String(user._id),
+      name:        user.name,
+      email:       user.email,
+      role:        user.role,
+      permissions: user.permissions ?? [],
+      office:      user.office ? String(user.office._id ?? user.office) : null,
+      position:    user.position ?? "",
+    },
+  });
 });
 
 // ── User management (super_admin only for write; comms_sec can read) ───────

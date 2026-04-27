@@ -6,9 +6,7 @@ import rateLimit from "express-rate-limit";
 import hpp from "hpp";
 import morgan from "morgan";
 import mongoose from "mongoose";
-import path from "path";
-import { fileURLToPath } from "url";
-import { ExpressAuth } from "@auth/express";
+import { clerkMiddleware } from "@clerk/express";
 import authRouter from "./authentication/routes/auth.js";
 import officesRouter from "./authentication/routes/offices.js";
 import systemsRouter from "./website/routes/systems.js";
@@ -16,7 +14,6 @@ import newsRouter from "./website/routes/news.js";
 import schoolsRouter from "./website/routes/schools.js";
 import bannersRouter from "./website/routes/banners.js";
 import fileSpacesRoutes from "./website/routes/fileSpacesRoutes.js";
-import { authConfig } from "./authentication/configs/config.js";
 import { authSession } from "./authentication/middlewares/authSession.js";
 import meetingRouter       from "./cebrol/routes/meeting.js";
 import agendaRouter        from "./cebrol/routes/agenda.js";
@@ -56,18 +53,11 @@ app.use(
           "The CORS policy for this site does not allow access from the specified Origin.";
         return callback(new Error(msg), false);
       }
-      // Echo back the allowed origin (required for credentialed requests).
       return callback(null, origin);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-Auth-Return-Redirect",
-      "X-Auth-Token",
-    ],
-    exposedHeaders: ["Set-Cookie"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     preflightContinue: false,
     optionsSuccessStatus: 204,
   }),
@@ -80,9 +70,11 @@ app.use(hpp());
 app.use(morgan("combined"));
 app.use(rateLimit({ windowMs: 1 * 60 * 1000, max: 100 })); // 100 requests per 1 min
 
+// Clerk authentication middleware (must be before routes)
+app.set("trust proxy", 1);
+app.use(clerkMiddleware());
+
 // Routes
-app.set("trust proxy", 1); // trust first proxy
-app.use("/auth", ExpressAuth(authConfig));
 app.use("/api/auth", authRouter);
 app.use("/api/offices", officesRouter);
 
